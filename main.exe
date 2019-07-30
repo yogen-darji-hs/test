@@ -1,0 +1,258 @@
+
+const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { autoUpdater } = require("electron-updater");
+const electron = require('electron')
+// Module with utilities for working with file and directory paths.
+const path = require('path')
+// Module with utilities for URL resolution and parsing.
+const url = require('url')
+var os = require("os");
+var platform = os.platform() + '_' + os.arch();
+var version = app.getVersion(); // comes from package.json
+
+// Keep a global reference of the window object, if you don't, the window will
+// be closed automatically when the JavaScript object is garbage collected.
+let mainWindow
+
+// Deep linked url parameters
+let deeplinkingUrlParam
+
+// CaseId passed as url parameter from Beamreader web
+let caseId = 3000000
+let caseServiceId = 15
+let token = ''
+let quitAndInstallApp = false
+
+autoUpdater.setFeedURL(
+    {
+        "provider": "generic", "url": 'https://gist.githubusercontent.com/yogen-darji-hs/ece6523014fafe5a0af8173773a49e41/raw/5f05b13b168a273367593e3c61108a1129b045c6?platform=' + platform + '&version=' + version
+    });
+
+// Force Single Instance Application
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (event, argv, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    // Protocol handler for win32
+    // argv: An array of the second instance’s (command line / deep linked) arguments
+    if (process.platform == 'win32') {
+      // Keep only command line / deep linked arguments
+      var arguments = argv.slice(1).toString()
+      // logEverywhere("arguments# " + arguments)
+
+      // Get parameters from url
+      var urlArg = arguments.split(',')[2].toString()
+
+      deeplinkingUrlParam = urlArg.split('//')[1].toString()
+      deeplinkingUrlParam = deeplinkingUrlParam.replace('/', '')
+      if (deeplinkingUrlParam.length > 0) {
+        var urlParams = deeplinkingUrlParam.split('&')
+        // logEverywhere("urlParams#" + urlParams)
+        if (urlParams.length > 0) {
+          urlParams.forEach(function (param) {
+            var pr = param.split('=')
+            if (pr[0].toLowerCase() == "caseid") {
+              caseId = pr[1];
+            }
+            else if (pr[0].toLowerCase() == "caseserviceid") {
+              caseServiceId = pr[1];
+            }
+            else if (pr[0].toLowerCase() == "token") {
+              var temp = param.replace('token=', '')
+              //   logEverywhere("param#" + param)
+              token = temp;
+            }
+          });
+        }
+      }
+    }
+    // logEverywhere("params#" + deeplinkingUrlParam)
+    //logEverywhere("caseId#" + caseId)
+    //logEverywhere("caseServiceId#" + caseServiceId)
+    // logEverywhere("token#" + token)
+    global.caseId = caseId
+    global.caseServiceId = caseServiceId
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+
+  // Create myWindow, load the rest of the app, etc...
+  app.on('ready', () => {
+
+  })
+}
+
+function createWindow() {
+  // logEverywhere("urlPath#" + urlPath)
+
+  // Define variable to check on app exit if any data changes pending to be saved
+  global.isChangesPending = { val: false, forceClose: false };
+  // Protocol handler for win32
+  if (process.platform == 'win32') {
+    // Keep only command line / deep linked arguments
+    // var deepLinkurl = process.argv.slice(1).toString()
+    var deepLinkurl = 'reportingtool://caseid=3000001&caseserviceid=16&token=XfoJREziLv9iOEiZc6HEvR/4VDX+rGD8TS6tvR/JLpsHtCIfS7EtCAS6pCocWQ5fgkFleWS+rWeGRQUcWOh1CaupKrktjePYq57uHCWlkcIaltvJfrAfXs0sDdK/C44MLmSHxJxFii59YGPfP8TH7Qi3FZSeSmhyWF5YSZS1/D/oOYPVblcx/00pZq/ttynXohZpxgqGlaF7Irvltm2f81uuqTEL6ul87/9nlIp50l0Ki+7pIyFVJyl62xTNq1mqUmLa3Ibv4CDJyXwV06uTp2O1+L39wg6cyg7qHkCyAl5of+JVjN5kdhBzSfvswAcbSesaxTqorr4iMmhJ1GHCbQ=='
+    // Get parameters from url
+    //logEverywhere("deepLinkurl#" + deepLinkurl)
+    if (deepLinkurl.indexOf(':') > -1) {
+      deeplinkingUrlParam = deepLinkurl.split('//')[1].toString()
+      // deeplinkingUrlParam = deeplinkingUrlParam.replace('/', '')
+      var urlParams = deeplinkingUrlParam.split('&')
+      //logEverywhere("urlParams#" + urlParams)
+      if (urlParams.length > 0) {
+        urlParams.forEach(function (param) {
+          var pr = param.split('=')
+          if (pr[0].toLowerCase() == "caseid") {
+            caseId = pr[1];
+          }
+          else if (pr[0].toLowerCase() == "caseserviceid") {
+            caseServiceId = pr[1];
+          }
+          else if (pr[0].toLowerCase() == "token") {
+            var temp = param.replace('token=', '')
+            //logEverywhere("param#" + param)
+            token = temp;
+          }
+        });
+      }
+    }
+  }
+  // logEverywhere("params#" + deeplinkingUrlParam)
+  //logEverywhere("caseId#" + caseId)
+  //logEverywhere("caseServiceId#" + caseServiceId)
+  //logEverywhere("token#" + token)
+  global.caseId = caseId
+  global.caseServiceId = caseServiceId
+  global.token = token
+  global.deepLinkurl = process.argv
+
+  // Create the browser window.
+  mainWindow = new BrowserWindow({ icon: path.join(__dirname, 'favicon.ico'), webPreferences: { nodeIntegration: true, plugins: true, webviewTag: true } })
+  //// Open the DevTools.
+  mainWindow.webContents.openDevTools()
+  // Hide top menubar
+  mainWindow.setMenu(null)
+  var urlPath = path.join(__dirname, 'dist\\ReportingToolUI\\index.html')
+  // and load the index.html of the app.
+  mainWindow.loadURL(url.format({
+    pathname: urlPath,
+    protocol: 'file:',
+    slashes: true
+  }))
+  // app.showExitPrompt = true
+
+  mainWindow.on('close', (e) => {
+    if (global.isChangesPending.val) {
+      e.preventDefault() // Prevents the window from closing 
+      dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Yes', 'No'],
+        title: 'Confirm',
+        message: 'Unsaved data will be lost. Are you sure you want to quit?'
+      }, function (response) {
+        if (response === 0) { // Runs the following if 'Yes' is clicked
+          //app.showExitPrompt = false
+          global.isChangesPending.val = false;
+          global.isChangesPending.forceClose = true;
+          mainWindow.close()
+        }
+      })
+    }
+  })
+
+  // when the update is ready, notify the BrowserWindow
+  autoUpdater.on('update-downloaded', (info) => {
+    // win.webContents.send('updateReady')
+    this.quitAndInstallApp = true;
+    console.log("updateReady..");
+    dialog.showMessageBox({
+      type:"info",
+      title: 'New Version Downloaded',
+      message: 'The update will be applied when you will close the app.'
+     // buttons: ['Restart', 'Later']
+    }, (response) => {
+      // if (response === 0) {
+      //   autoUpdater.quitAndInstall(isSilent = false, isForceRunAfter = false);
+      // }
+    });
+    // autoUpdater.quitAndInstall();
+  });
+
+
+  autoUpdater.on('checking-for-update', (info) => {
+    sendStatusToWindow("Check for update");
+    console.log("checking for update..");
+
+  });
+
+  // Emitted when the window is closed.
+  mainWindow.on('closed', function () {
+    // Dereference the window object, usually you would store windows
+    // in an array if your app supports multi windows, this is the time
+    // when you should delete the corresponding element.
+    mainWindow = null;
+    if (this.quitAndInstallApp)
+      autoUpdater.quitAndInstall(isSilent = true, isForceRunAfter = false);
+  })
+
+  mainWindow.maximize()
+}
+
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+//app.on('ready', createWindow)
+
+app.on('ready', function () {
+  createWindow();
+
+  // wait for things to settle in
+  setTimeout(() => {
+    autoUpdater.checkForUpdates();
+  }, 5000);
+});
+// ipcMain.on("quitAndInstall", (event, arg) => {
+//   autoUpdater.quitAndInstall(isSilent = false, isForceRunAfter = true);
+// })
+//ipcMain.on('quitAndInstall', () => autoUpdater.quitAndInstall());
+
+// Quit when all windows are closed.
+app.on('window-all-closed', function () {
+  // On OS X it is common for applications and their menu bar
+  // to stay active until the user quits explicitly with Cmd + Q
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+
+app.on('activate', function () {
+  // On OS X it's common to re-create a window in the app when the
+  // dock icon is clicked and there are no other windows open.
+  if (mainWindow === null) {
+    createWindow()
+  }
+})
+
+// Define custom protocol handler. Deep linking works on packaged versions of the application!
+app.setAsDefaultProtocolClient('reportingtool')
+
+const sendStatusToWindow = (text) => {
+  console.log(text);
+  if (mainWindow) {
+    mainWindow.webContents.send('message', text)
+  }
+}
+
+// Log both at dev console and at running node console instance
+function logEverywhere(s) {
+  console.log(s)
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.executeJavaScript(`console.log("${s}")`)
+  }
+}
